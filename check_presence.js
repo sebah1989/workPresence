@@ -3,14 +3,25 @@
 (function() {
     "use strict";
     var http = require('http'),
-        options = {
-            host: '127.0.0.1',
-            port: 9000
+        workers_to_track = {
+            "seba": {
+                presence: {},
+                url: {
+                    host: '127.0.0.1',
+                    port: 9000
+                }
+            },
+            "noname": {
+                presence: {},
+                url: {
+                    host: '127.0.0.1',
+                    port: 8000
+                }
+            }
         },
         cheerio = require('cheerio'),
         db = require('./db.js'),
         db_connection = db.makeConnection(),
-        workers_presences = {},
         collectWorkersInWorkStatus = function(html) {
             var $ = cheerio.load(html),
                 rows = $("body").find("tr"),
@@ -117,10 +128,9 @@
                 }
             }
             return changed_workers;
-        };
-    exports.check = function() {
-        setInterval(function() {
-            http.get(options, function(res) {
+        },
+        askForWorker = function(worker) {
+            http.get(worker.url, function(res) {
                 var body = [],
                     presence_changed,
                     current_workers_presences;
@@ -129,25 +139,38 @@
                 });
                 res.on('end', function() {
                     body = Buffer.concat(body).toString();
-                    if (Object.keys(workers_presences).length === 0) {
-                        workers_presences = collectWorkersInWorkStatus(body);
+                    if (Object.keys(worker.presence).length === 0) {
+                        worker.presence = collectWorkersInWorkStatus(body);
                         db_connection.all("SELECT name, surname FROM workers", function(err, rows) {
                             if (!err && rows) {
-                                createMissingWorkersInDb(rows, workers_presences);
-                                updateWorkersPresencesInDb(workers_presences);
+                                createMissingWorkersInDb(rows, worker.presence);
+                                updateWorkersPresencesInDb(worker.presence);
                             } else if (err) {
                                 console.log(err);
                             }
                         });
                     } else {
                         current_workers_presences = collectWorkersInWorkStatus(body);
-                        presence_changed = getWorkersWhichPresenceChanged(workers_presences, current_workers_presences);
-                        workers_presences = current_workers_presences;
+                        presence_changed = getWorkersWhichPresenceChanged(worker.presence, current_workers_presences);
+                        worker.presence = current_workers_presences;
                         updateWorkersPresencesInDb(presence_changed);
                     }
                 });
 
             });
-        }, 3000);
+        },
+        askForGivenWorkers = function(workers) {
+            var key, worker;
+            for (key in workers) {
+                if (workers.hasOwnProperty(key)) {
+                    worker = workers[key];
+                    askForWorker(worker);
+                }
+            }
+        };
+    exports.check = function() {
+        setInterval(function() {
+            askForGivenWorkers(workers_to_track);
+        }, 300000);
     };
 }());
