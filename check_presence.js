@@ -10,18 +10,19 @@
                     host: '127.0.0.1',
                     port: 9000
                 }
-            },
-            "noname": {
-                presence: {},
-                url: {
-                    host: '127.0.0.1',
-                    port: 8000
-                }
             }
+            // ,
+            // "noname": {
+            //     presence: {},
+            //     url: {
+            //         host: '127.0.0.1',
+            //         port: 8000
+            //     }
+            // }
         },
         cheerio = require('cheerio'),
+        db_connection,
         db = require('./db.js'),
-        db_connection = db.makeConnection(),
         collectWorkersInWorkStatus = function(html) {
             var $ = cheerio.load(html),
                 rows = $("body").find("tr"),
@@ -43,6 +44,7 @@
                     };
                 }
             });
+            rows = cells = null;
             return presences;
         },
         formatDate = function(date_object) {
@@ -170,7 +172,9 @@
         };
     exports.check = function() {
         setInterval(function() {
+            db_connection = db.makeConnection();
             askForGivenWorkers(workers_to_track);
-        }, 300000);
+            db.closeConnection(db_connection);
+        }, 3000);
     };
 }());
